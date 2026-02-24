@@ -1,0 +1,75 @@
+//+------------------------------------------------------------------+
+//|                                              SimpleEMACross.mq5  |
+//|                                  Copyright 2026, Gemini Adaptive |
+//+------------------------------------------------------------------+
+#property strict
+
+#include <Trade\Trade.mqh>
+
+//--- Inputs
+input int      FastEMAPeriod = 9;          // Fast EMA Period
+input int      SlowEMAPeriod = 21;         // Slow EMA Period
+input double   LotSize       = 0.1;        // Trade Volume
+input int      MagicNumber   = 123456;     // EA Identifier
+
+//--- Global Variables
+int            handleFastEMA;              // Handle for the 9 EMA
+int            handleSlowEMA;              // Handle for the 21 EMA
+CTrade         trade;                      // Trading class
+
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+   // Initialize EMA handles
+   handleFastEMA = iMA(_Symbol, _Period, FastEMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
+   handleSlowEMA = iMA(_Symbol, _Period, SlowEMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
+   
+   // Check if handles are valid
+   if(handleFastEMA == INVALID_HANDLE || handleSlowEMA == INVALID_HANDLE)
+   {
+      Print("Error creating indicator handles");
+      return(INIT_FAILED);
+   }
+   
+   trade.SetExpertMagicNumber(MagicNumber);
+   return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   // We need at least 3 bars to check for a crossover
+   double fastEMA[], slowEMA[];
+   
+   // Set arrays as series (index 0 is the most recent bar)
+   ArraySetAsSeries(fastEMA, true);
+   ArraySetAsSeries(slowEMA, true);
+   
+   // Copy indicator values to arrays
+   if(CopyBuffer(handleFastEMA, 0, 0, 3, fastEMA) < 3) return;
+   if(CopyBuffer(handleSlowEMA, 0, 0, 3, slowEMA) < 3) return;
+
+   // Check for Buy Signal: Fast crosses ABOVE Slow
+   // (Fast current > Slow current) AND (Fast previous <= Slow previous)
+   bool buyCondition = (fastEMA[1] > slowEMA[1]) && (fastEMA[2] <= slowEMA[2]);
+   
+   // Check for Sell Signal: Fast crosses BELOW Slow
+   bool sellCondition = (fastEMA[1] < slowEMA[1]) && (fastEMA[2] >= slowEMA[2]);
+
+   // Simple execution logic (only one trade at a time for this example)
+   if(buyCondition && !PositionSelect(_Symbol))
+   {
+      Print("Buying! Fast EMA crossed above Slow EMA.");
+      trade.Buy(LotSize, _Symbol, SymbolInfoDouble(_Symbol, SYMBOL_ASK), 0, 0);
+   }
+   
+   if(sellCondition && !PositionSelect(_Symbol))
+   {
+      Print("Selling! Fast EMA crossed below Slow EMA.");
+      trade.Sell(LotSize, _Symbol, SymbolInfoDouble(_Symbol, SYMBOL_BID), 0, 0);
+   }
+}
